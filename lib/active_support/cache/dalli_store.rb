@@ -183,7 +183,7 @@ module ActiveSupport
             end
           end
 
-          data = with { |c| c.get_multi(mapping.keys - results.keys) }
+          data = with { |c| c.get_multi(mapping.keys - results.keys, options) }
           results.merge!(data)
           results.inject({}) do |memo, (inner, _)|
             entry = results[inner]
@@ -206,7 +206,7 @@ module ActiveSupport
 
         instrument_with_log(:fetch_multi, mapping.keys) do
           with do |connection|
-            results = connection.get_multi(mapping.keys)
+            results = connection.get_multi(mapping.keys, options)
 
             connection.multi do
               mapping.inject({}) do |memo, (expanded, name)|
@@ -236,12 +236,12 @@ module ActiveSupport
         initial = options.has_key?(:initial) ? options[:initial] : amount
         expires_in = options[:expires_in]
         instrument_with_log(:increment, name, :amount => amount) do
-          with { |c| c.incr(name, amount, expires_in, initial) }
+          with { |c| c.incr(name, amount, expires_in, initial, options) }
         end
       rescue Dalli::DalliError => e
         log_dalli_error(e)
-        instrument_error(e) if instrument_errors?
-        raise if raise_errors?
+        instrument_error(e) if instrument_errors?(options)
+        raise if raise_errors?(options)
         nil
       end
 
@@ -256,12 +256,12 @@ module ActiveSupport
         initial = options.has_key?(:initial) ? options[:initial] : 0
         expires_in = options[:expires_in]
         instrument_with_log(:decrement, name, :amount => amount) do
-          with { |c| c.decr(name, amount, expires_in, initial) }
+          with { |c| c.decr(name, amount, expires_in, initial, options) }
         end
       rescue Dalli::DalliError => e
         log_dalli_error(e)
-        instrument_error(e) if instrument_errors?
-        raise if raise_errors?
+        instrument_error(e) if instrument_errors?(options)
+        raise if raise_errors?(options)
         nil
       end
 
@@ -273,8 +273,8 @@ module ActiveSupport
         end
       rescue Dalli::DalliError => e
         log_dalli_error(e)
-        instrument_error(e) if instrument_errors?
-        raise if raise_errors?
+        instrument_error(e) if instrument_errors?(options)
+        raise if raise_errors?(options)
         nil
       end
 
@@ -308,8 +308,8 @@ module ActiveSupport
         entry.is_a?(ActiveSupport::Cache::Entry) ? entry.value : entry
       rescue Dalli::DalliError => e
         log_dalli_error(e)
-        instrument_error(e) if instrument_errors?
-        raise if raise_errors?
+        instrument_error(e) if instrument_errors?(options)
+        raise if raise_errors?(options)
         nil
       end
 
@@ -323,18 +323,18 @@ module ActiveSupport
         connection.send(method, key, value, expires_in, options)
       rescue Dalli::DalliError => e
         log_dalli_error(e)
-        instrument_error(e) if instrument_errors?
-        raise if raise_errors?
+        instrument_error(e) if instrument_errors?(options)
+        raise if raise_errors?(options)
         false
       end
 
       # Delete an entry from the cache.
       def delete_entry(key, options) # :nodoc:
-        with { |c| c.delete(key) }
+        with { |c| c.delete(key, options) }
       rescue Dalli::DalliError => e
         log_dalli_error(e)
-        instrument_error(e) if instrument_errors?
-        raise if raise_errors?
+        instrument_error(e) if instrument_errors?(options)
+        raise if raise_errors?(options)
         false
       end
 
@@ -404,12 +404,14 @@ module ActiveSupport
         logger.debug("Cache #{operation}: #{key}#{options.blank? ? "" : " (#{options.inspect})"}")
       end
 
-      def raise_errors?
-        !!@options[:raise_errors]
+      def raise_errors?(options=nil)
+        options ||= {}
+        !!@options[:raise_errors] || !!options[:raise_errors]
       end
 
-      def instrument_errors?
-        !!@options[:instrument_errors]
+      def instrument_errors?(options=nil)
+        options ||= {}
+        !!@options[:instrument_errors] || !!options[:instrument_errors]
       end
 
       # Make sure LocalCache is giving raw values, not `Entry`s, and

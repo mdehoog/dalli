@@ -6,8 +6,8 @@ module Dalli
     ##
     # Get the value and CAS ID associated with the key.  If a block is provided,
     # value and CAS will be passed to the block.
-    def get_cas(key)
-      (value, cas) = perform(:cas, key)
+    def get_cas(key, options=nil)
+      (value, cas) = perform(:cas, key, options)
       value = (!value || value == 'Not found') ? nil : value
       if block_given?
         yield value, cas
@@ -23,11 +23,12 @@ module Dalli
     # If no block is given, returns a hash of
     #   { 'key' => [value, cas_id] }
     def get_multi_cas(*keys)
+      options = keys.last.is_a?(::Hash) ? keys.pop : {}
       if block_given?
-        get_multi_yielder(keys) {|*args| yield(*args)}
+        get_multi_yielder(keys, options) {|*args| yield(*args)}
       else
         Hash.new.tap do |hash|
-          get_multi_yielder(keys) {|k, data| hash[k] = data}
+          get_multi_yielder(keys, options) {|k, data| hash[k] = data}
         end
       end
     end
@@ -51,8 +52,8 @@ module Dalli
 
     # Delete a key/value pair, verifying existing CAS.
     # Returns true if succeeded, and falsy otherwise.
-    def delete_cas(key, cas=0)
-      perform(:delete, key, cas)
+    def delete_cas(key, cas=0, options=nil)
+      perform(:delete, key, cas, options)
     end
 
   end

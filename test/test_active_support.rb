@@ -218,7 +218,7 @@ describe 'ActiveSupport::Cache::DalliStore' do
         # Fresh LocalStore
         @dalli.with_local_cache do
           @dalli.read(x)
-          Dalli::Client.any_instance.expects(:get_multi).with([y.to_s]).returns(y.to_s => 456)
+          Dalli::Client.any_instance.expects(:get_multi).with([y.to_s], {}).returns(y.to_s => 456)
 
           assert_equal({ x => '123', y => 456}, @dalli.read_multi(x, y))
         end
@@ -470,6 +470,38 @@ describe 'ActiveSupport::Cache::DalliStore' do
           assert_equal @dalli.read_multi('foo', 'bar'), {}
           assert_raises(*exception) { @dalli.delete 'foo' }
           assert_raises(*exception) { @dalli.fetch('foo') { 42 } }
+        end
+      end
+    end
+
+    it 'supports passing "raise_errors" in calls' do
+      new_port = 29333
+      with_cache port: new_port do
+        @dalli.write 'foo', 'bar'
+        assert_equal @dalli.read('foo'), 'bar'
+
+        memcached_kill(new_port)
+
+        silence_logger do
+          assert_nil @dalli.read('foo')
+        end
+      end
+
+      with_cache port: new_port do
+        memcached_kill(new_port)
+        exception = [Dalli::RingError, { :message => "No server available" }]
+
+        silence_logger do
+          assert_raises(*exception) { @dalli.read 'foo', :raise_errors => true }
+          assert_raises(*exception) { @dalli.read 'foo', :raise_errors => true, :raw => true }
+          assert_raises(*exception) { @dalli.write 'foo', 'bar', :raise_errors => true }
+          assert_raises(*exception) { @dalli.exist? 'foo', :raise_errors => true }
+          assert_raises(*exception) { @dalli.increment 'foo', 1, :raise_errors => true }
+          assert_raises(*exception) { @dalli.decrement 'foo', 1, :raise_errors => true }
+          assert_raises(*exception) { @dalli.delete 'foo', :raise_errors => true }
+          assert_equal @dalli.read_multi('foo', 'bar', :raise_errors => true), {}
+          assert_raises(*exception) { @dalli.delete 'foo', :raise_errors => true }
+          assert_raises(*exception) { @dalli.fetch('foo', :raise_errors => true) { 42 } }
         end
       end
     end
